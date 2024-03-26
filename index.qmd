@@ -1,7 +1,7 @@
 ---
 title: "Hello there!"
 pagetitle: "Alireza Taghdisian"
-main-photo: /files/profile_pics/profile.JPG
+main-photo: files/profile_pics/profile.JPG
 title-block-banner: "#a8dadc"
 format:
   html:

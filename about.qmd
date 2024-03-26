@@ -1,6 +1,6 @@
 ---
 title: "About"
-image: "profile.JPG"
+image: "files/profile_pics/profile.JPG"
 about: 
   template: solana
   image-width: 12em
@@ -16,28 +16,27 @@ about:
     text: Github
     href: https://github.com/alirezt
 ---
- 
+
 ## Bio
 
-Ali got his B.S. in Civil Engineering, and his M.S. in Civil and Environmental Engineering. After graduating, he tested designed novel waste technologies to re-use of saline waste to tackle water scarcity and food security in his home country of Iran . Since then, he has shifted away from conventional engineering solutions towards system analysis of the  underlying social and political drivers of environmental change. 
+Ali got his B.S. in Civil Engineering, and his M.S. in Civil and Environmental Engineering. After graduating, he tested designed novel waste technologies to re-use of saline waste to tackle water scarcity and food security in his home country of Iran . Since then, he has shifted away from conventional engineering solutions towards system analysis of the underlying social and political drivers of environmental change.
 
-He has experiences as an engineer, researcher, and lately as geospatial data scientist. His current focus is on how human society, specifically urban areas, interact with their environment and metabolize socio-ecological flows and co-evolve. 
+He has experiences as an engineer, researcher, and lately as geospatial data scientist. His current focus is on how human society, specifically urban areas, interact with their environment and metabolize socio-ecological flows and co-evolve.
 
 ## Education
 
-**PhD Bioresource engineering** | McGill, Canada | 2023 - 2027
+**PhD Bioresource engineering** \| McGill, Canada \| 2023 - 2027
 
-**M.S. Civil and Environmental Engineering** | Shahid Beheshti University, Iran | 2015 - 2018 
+**M.S. Civil and Environmental Engineering** \| Shahid Beheshti University, Iran \| 2015 - 2018
 
-**B.S. Civil Engineering** | Kerman University, Iran | 2009 - 2013 
+**B.S. Civil Engineering** \| Kerman University, Iran \| 2009 - 2013
 
 ## Experience
 
-**Data consultant** | Freelance | Global Alliance for Improved Nutrition | Jan 2023 - Present
+**Data consultant** \| Freelance \| Global Alliance for Improved Nutrition \| Jan 2023 - Present
 
-**Data (GIS) Scientist** | Full-time | Aurecon | Feb 2023 - May 2023
+**Data (GIS) Scientist** \| Full-time \| Aurecon \| Feb 2023 - May 2023
 
-**Sustainability scientist** | Freelance | Iran Department of the Environment | Apr 2019 - Apr 2022
+**Sustainability scientist** \| Freelance \| Iran Department of the Environment \| Apr 2019 - Apr 2022
 
-**Civil/environmental engineer** | Full-time | Dorriz engineering | Feb 2016 - Apr 2022
-
+**Civil/environmental engineer** \| Full-time \| Dorriz engineering \| Feb 2016 - Apr 2022
