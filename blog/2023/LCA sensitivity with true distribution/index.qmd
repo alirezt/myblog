@@ -1,0 +1,97 @@
+---
+title: "Annual or daily average?"
+date: 2023-10-08
+description: "Importance of aggregation level on sensitivity of LCA output"
+image: "img/jiec12742-fig-0001-m.jpg"
+twitter-card: 
+  image: "img/jiec12742-fig-0001-m.jpg"
+open-graph: 
+  image: "img/jiec12742-fig-0001-m.jpg"
+categories: 
+  - review
+  - jounral of industrial ecology
+  - LCA
+  - sensitivity analysis 
+  - uncertainty analysis
+  - distrubution
+  - use-stage LCA
+  - markov chain
+  - airconditioning
+---
+
+::: column-page-inset
+![Sensitivity test on LCA output distribution modeled with different input temporal resolutions](img/jiec12742-fig-0001-m.jpg)
+:::
+
+Life cycle assessment (LCA) is probably the number-one method for assessing environmental performance of an activity, product, or service. There are a couple of good resources if you want to know more about this methodology which I mentioned at the end of this post. But the things that I like to share here are some insights from a [study](https://onlinelibrary.wiley.com/doi/abs/10.1111/jiec.12742) in [Journal of Industrial Ecology](https://onlinelibrary.wiley.com/journal/15309290) on **uncertainty** of the output of the LCA methods driven by **variability** and **granularity** of input data.
+
+One big challenge of LCA is its inventory **characterization step** which simply is the process that we take to collect input data to inject to LCA. For instance, electricity consumption in appliance based LCA, and in general as one of the key LCA inputs, is by far the largest contributor to GHG emissions impact category. Now imagine that you want to characterize this parameter for a product like cooking machine, dishwasher, or air-con systems. In most cases, we could find coarse data like annual or monthly average over a large area, like national or provincial level. Though this averaging strategy can significantly affect the LCA output and this is where big data innovations and machine learning can help us.
+
+Thanks to **pervasive sensing** and **Internet of Things (IoT)**, we can collect data for energy consumption up to minute-by-minute resolution for home appliances. So how this data granularity could improve LCA? It’s simple. By adding more information on true shape or **distribution** of input parameters like electricity energy consumption. In this paper, authors tried to capture detailed variability of electricity consumption of air conditioners by increasing granularity from **annual average** down to **daily average**. And here is the point, they found that replacing annual values with daily ones could **reduce almost 80% of uncertainties in the output of the LCA**. Put it simply, variability of GHG emission estimates modeled with LCA reduce by 80%. So, this is pretty serious point in LCA modeling of products that use a lot energy in their **use-stage** and have high variability due to some external factors, like **seasonal variability** and people behavior which in this context named as **interindividual variability**.
+
+You could see the amount of reduction (or diminishing return) when going from coarse to high granularity. Two important criteria that are used for interpretation of the fit are **coefficient of variation CV** and **contribution to variance CTV** which both reduce as we use richer data set for input parameters. You can see the Markov chain simulation result below which simply shows how output variability indicators (CTV and CV) goes down as temporal resolution gets shrunk to daily average.
+
+```{r}
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+library(dplyr)
+
+readxl::read_excel(
+  path = "tables/jiec12742-sup-0001-suppmat.xlsx", 
+  sheet = 2, 
+  range = "A69:F75", 
+  col_names = c(
+    "Statistic", 
+    "Units", 
+    "Annual", 
+    "Monthly", 
+    "Weekly", 
+    "Daily"
+  ), 
+  col_types = NULL, 
+) %>%
+  gt::gt() %>%
+  gt::tab_header(title = "Output statistics", subtitle = gt::md("estimated **lifetime greenhouse gas emissions** of air-conditioning systems from stochastic modeling where use-stage electricity consumption (PAC) was aggregated and characterized at different data granularities")
+  ) %>%
+  gt::tab_spanner(
+    label = "Data granularity", 
+    columns = c("Annual", "Monthly", "Weekly", "Daily")
+  ) %>%
+  gt::fmt_number(rows = 1:5, decimals = 0, use_seps = T) %>%
+  gt::tab_footnote(
+    footnote = "Standard deviation", 
+    locations = gt::cells_body(columns = Statistic, rows = 2)
+  ) %>%
+  gt::tab_footnote(
+    footnote = "Coefficient of variation", 
+    locations = gt::cells_body(columns = Statistic, rows = 6)
+  ) %>%
+  gt::tab_footnote(
+    footnote = "Contribution to variance", 
+    locations = gt::cells_body(columns = Statistic, rows = 7)
+  ) %>%
+  gt::tab_source_note(source_note = gt::md("**Source**: Data from the paper's [supporing information](https://onlinelibrary-wiley-com.proxy3.library.mcgill.ca/action/downloadSupplement?doi=10.1111%2Fjiec.12742&file=jiec12742-sup-0001-SuppMat.xlsx)")
+  ) %>%
+  gt::tab_style_body(
+    style = list(
+      gt::cell_text(
+      font = gt::google_font("Inter"),
+      color = "white"
+    ),
+    gt::cell_fill(color = "#2a9d8f"),
+    gt::cell_borders(sides = "all", color = "#264653", weight = gt::px(4))
+    ), 
+    values = c(0.79)
+  )
+
+```
+
+Bottom-line: leveraging big data usage in LCA inventory development can significantly reduce uncertainty. This is also the case for **energy grid mix** as well. Decomposition of energy mix in electricity grid through big, high-resolution data may change our perception on GHG emission and sustainability of a region.
+
+::: {.callout-tip collapse="true"}
+## Here are some useful resources for LCA systems
+
+A very good book is [Life Cycle Assessment: Theory and Practice](https://link.springer.com/10.1007/978-3-319-56475-3) if you want to start learning systematically. Couple of useful papers like [Recent developments in Life Cycle Assessment](https://www.sciencedirect.com/science/article/pii/S0301479709002345), [Territorial Life Cycle Assessment (LCA): What exactly is it about? A proposal towards using a common terminology and a research agenda](https://www.sciencedirect.com/science/article/pii/S0959652617331402), and [Critical review and practical recommendations to integrate the spatial dimension into life cycle assessment](https://www.sciencedirect.com/science/article/pii/S0959652617331827).
+:::

@@ -1,0 +1,35 @@
+---
+title: "Hello there!"
+pagetitle: "Alireza Taghdisian"
+main-photo: /files/profile pics/profile.jpg
+#main-photo-square: /files/profiles/andrew-heiss-2022-square.jpg
+title-block-banner: "#a8dadc"
+format:
+  html:
+    quarto-template-params:
+      banner-header-class: "home"
+---
+
+::: grid
+::: {.g-col-12 .g-col-sm-4}
+```{=html}
+<div class="grid" style="--bs-columns: 5; row-gap: 0;">
+  <div class="g-col-1 g-col-sm-0"></div>
+  <div class="g-col-3 g-col-sm-5">
+    <picture>
+      <source media="(max-width: 576px)" srcset="{{< meta main-photo-square >}}">
+      <source media="(min-width: 576px)" srcset="{{< meta main-photo >}}">
+      <img class="img-fluid" src="{{< meta main-photo >}}" alt="{{< meta author-meta >}}">
+    </picture>
+  </div>
+  <div class="g-col-1 g-col-sm-0"></div>
+</div>
+```
+:::
+
+::: {.g-col-12 .g-col-sm-8}
+I'm a PhD student in [The Department of Bioresource Engineering](https://www.mcgill.ca/bioeng/) part of the [Faculty of Agricultural and Environmental Sciences](https://www.mcgill.ca/macdonald/) of [McGill University](https://www.mcgill.ca/) in Canada. I got my B.S. in Civil Engineering, and my M.S. in Civil and Environmental Engineering from [Shahid Beheshti University](https://en.sbu.ac.ir/)[Faculty of Civil, Water and Environmental Engineering](https://encwe.sbu.ac.ir/). After graduating, I tested designed novel waste technologies to re-use of saline waste to tackle water scarcity and food security in my home country of Iran. Since then, I have shifted away from conventional engineering solutions towards system analysis of the underlying social and political drivers of environmental change. My current research focus is on how human society, specifically urban areas, interact with their environment and metabolize socio-ecological flows and co-evolve.
+
+I have professional experiences as an engineer in [Dorriz company](https://dorriz.com/?avia_forced_reroute=1), as a sustainability researcher in [Iran Department of Environment](http://www.doe.ir/), and lately as geospatial data scientist in [Aurecon Australia](https://www.aurecongroup.com/), and data analytics consultant in [Global Alliance for Improved Nutrition](https://www.gainhealth.org/).
+:::
+:::

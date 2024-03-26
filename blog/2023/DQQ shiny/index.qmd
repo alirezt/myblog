@@ -1,0 +1,218 @@
+---
+title: "Make your quarto interactive with embedded shiny app"
+date: 2023-05-08
+description: "Use HTML iframe tag to link shiny and quarto"
+image: "img/cover.jpg"
+twitter-card: 
+  image: "img/cover.jpg"
+open-graph: 
+  image: "img/cover.jpg"
+categories: 
+  - r
+  - shiny
+  - quarto
+  - visualization
+  - interactivity
+  - DQQ
+  - GAIN
+---
+
+# Short introduction on input data and iframe tag
+I had a project with [GAIN](https://www.gainhealth.org/) which involved data collection, analysis, and visualization. Main inputs were based on *survey data* came from [Gallup World Poll survey](https://www.gallup.com/analytics/318875/global-research.aspx) and their research partner in [Diet Quality Questionnaire](https://www.dietquality.org/) project. 
+
+:::{.column-margin}
+
+The Global Diet Quality Project is a collaboration between Gallup, Harvard Department of Global Health and Population, and the Global Alliance for Improved Nutrition (GAIN).
+
+
+This project aims to collect dietary quality data in the general adult population across countries worldwide, and to provide the tools for valid and feasible diet quality monitoring within countries. The project enables the collection of consistent, comparable dietary data across countries for the first time. [source](https://www.dietquality.org/about)
+
+:::
+
+
+Here I want to show you how you could use shiny with all its **interactive capabilities** inside a quarto document (like the one you're reading now). The idea is simple, just copy and paste HTML link of your shiny app inside iframe tag which is an inline frame  used to *embed* another document within the current HTML document. You could find more info in this [W3school](https://www.w3schools.com/tags/tag_iframe.ASP). I just picked two tips and will show you how to apply this method:
+
+
+1. Tip: Use **CSS** to style the iframe (see example below). 
+2. Tip: It is a good practice to always include a **title attribute** for the iframe. This is used by screen readers to read out what the content of the iframe is.
+
+
+# How to implement 
+Ok, lets begin: here is my code for shiny app which map diet survey data (analyzed by complex survey design package in R) across the world for 56 countries. You could choose what indicator, or subgroup to choose, but also you can decide on number of discrete colors used for filling the map. 
+
+```{r}
+#| eval: false
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+
+library(readr)
+library(tidyr)
+library(shiny)
+library(sf)
+library(dplyr)
+library(viridis)
+library(showtext)
+library(ggplot2)
+library(purrr)
+library(rnaturalearth)
+library(maps)
+
+
+font_paths("www")
+font_add("Whitney", regular = "whitneybook.otf", 
+           bold = "whitneybold.otf",
+           italic = "whitneybookitalic.otf", 
+           bolditalic = "whitneysemibold.otf")
+
+showtext_auto()
+par(family = "Whitney")
+
+dat <- read_csv("data/DQQ_GWP_2021-2022_Internal_17Feb2024.csv")
+shp <- ne_countries(returnclass = "sf", scale = 110)
+
+dat2 <-  dat %>%
+  group_by(Country, Indicator, Subgroup) %>%
+  mutate(Mean_prevalence = mean(Mean_prevalence)) %>%
+  distinct(Country, Indicator, Subgroup, .keep_all = T) %>%
+  right_join(shp[ , c("geometry", "iso_a3")], by = join_by(ISO3 == iso_a3)) %>%
+  filter(ISO3 != "ATA") %>%
+  st_as_sf()
+
+
+ui <- bootstrapPage(
+  tags$style(type = "text/css", "html, body {width:100%;height:100%}"),
+  plotOutput("map", width = "100%", height = "110%"),
+  tableOutput("table"),
+  absolutePanel(bottom = 10, left = 10, draggable = TRUE, width = "250px", height = "250px",
+                selectInput(selected = "All", label = "Select a subgroup: ", inputId = "subgroup", choices = unique(dat2$Subgroup)),
+                selectInput(selected = "Fish or seafood", label = "Select an indicator", inputId = "var", choices = unique(dat2$Indicator)),
+                sliderInput(inputId = "quant", label = "Select the number of quantiles", value = 3, min = 3, max = 5)
+  )
+)
+
+server <- function(input, output, session){
+  
+  dat3 <- reactive({
+    dat2 %>% 
+      select(-c(DQQ_question, Difference, Diff_LCI, Diff_UCI, Diff_p)) %>%
+      drop_na() %>%
+      filter(Subgroup == input$subgroup & Indicator == input$var)
+  })
+  
+  quantiles <- reactive({
+    dat3() %>%
+      pull(var = `Mean_prevalence`) %>%
+      quantile(probs = seq(0, 1, length.out = input$quant +1), na.rm = TRUE) %>% 
+      as.vector()
+  })
+  
+  labels <- reactive({
+    imap_chr(quantiles(), function(x, idx){
+      return(paste0(round(quantiles()[idx], 0), "%", " – ", round(quantiles()[idx + 1], 0), "%"))
+    })
+  })
+  
+  dat4 <- reactive({
+    mylabels <- labels()[1:length(labels()) - 1]
+    dat3() %>%
+      mutate(mean_quantiles = cut(Mean_prevalence,
+                                  breaks = quantiles(),
+                                  labels = mylabels,
+                                  include.lowest = T))
+  })
+  
+  output$map <- renderPlot({
+    global <- map_data('world')
+    global <- global[global$region != "Antarctica", ]
+    dat4() %>%
+      ggplot() +
+      geom_polygon(data = global, aes(x=long, y=lat, group = group), fill='NA', color='black', size=0.2) +
+      geom_sf(aes(fill = `mean_quantiles`), color = "black", size = 0.5) +
+      scale_fill_viridis(
+        option = "A",
+        alpha = 0.9, 
+        begin = 0.1, 
+        end = 0.9,
+        discrete = T, 
+        direction = -1, 
+      ) +
+      guides(fill = guide_legend(direction = "horizontal",
+                                 label.hjust = 0.5,
+                                 nrow = 1,
+                                 byrow = T,
+                                 reverse = F,
+                                 label.position = "bottom",
+                                 keyheight = unit(4, units = "mm"),
+                                 keywidth = unit(30, units = "mm"))) +
+      labs(x = NULL,
+           y = NULL,
+           title = paste("Global map of", input$var, sep = " "),
+           subtitle = paste("Global variation of", input$var, "indicator", "in", input$subgroup, "sub-class", sep = " "),
+           caption = "Map CC-BY-SA; Code:github.com/alirezt") +
+      
+      theme_minimal() +
+      theme(
+        text = element_text(family = "Whitney", face = "bold", color = "black"),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        plot.background = element_rect(fill = "#f5f3f4", color = NA),
+        panel.background = element_rect(fill = "#f5f3f4", color = NA),
+        legend.background = element_rect(fill = "#f5f3f4", color = NA),
+        legend.position = "bottom",
+        plot.margin = unit(c(.5, .5, .2, .5), "cm"),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12, hjust = 0, face = "bold", color = "#4f504b", family = "Whitney"),
+        plot.title = element_text(size = 20, hjust = 0.5, color = "#4f504b", family = "Whitney"),
+        plot.subtitle = element_text(size = 12, hjust = 0.5, color = "#4f504b", 
+                                     margin = margin(b = 0.2, t = -0.1, l = 2, unit = "cm"), debug = F),
+        plot.caption = element_text(size = 10, hjust = .5, 
+                                    margin = margin(t = 0.2, b = 0, unit = "cm"), color = "#939184")
+      )
+  }) 
+  
+}
+
+shinyApp(ui, server)
+```
+
+Now, you could publish your app in [shinyapps service](https://www.shinyapps.io/) and copy and paste it like I did here which result in a nice interactive frame filled with your shiny application. Also, as you could see there are bunch of CSS style that I [Pandoc div block options](https://quarto.org/docs/authoring/figures.html#figure-panels) as well for designing arrangement and layouting purposes.  
+
+:::{.callout.tip}
+
+Note, as mentioned in [quarto docs](https://quarto.org/docs/authoring/figures.html#figure-divs), you can treat any markdown content you want as a figure by enclosing it in Pandoc div block.
+
+:::
+
+::: {.border .column-screen-inset layout="[70,-2,28]"}
+```{=html}
+ <iframe id="example1" src="https://alireza-taghdisian.shinyapps.io/dqqshiny_2/" style="border: none; width: 100%; height: 720px" frameborder="0"></iframe>
+```
+
+<div>
+<br/>
+
+Here is the exact code you I used in this quarto file to embed the shiny app.
+```html
+<iframe 
+id="example1" 
+src="https://alireza-taghdisian.shinyapps.io/dqqshiny_2/" 
+style="border: none; width: 100%; height: 720px" 
+frameborder="0">
+</iframe>
+```
+<br/>
+Also, I used below Pandoc div code for content arrangement. 
+```r
+::: {.border .column-screen-inset layout="[70,-2,28]"}
+:::
+```
+</div>
+
+:::
+
+
+
+
+

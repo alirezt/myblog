@@ -1,0 +1,960 @@
+---
+title: "Statistical analysis for weighted data"
+date: 2024-01-28
+description: "Step by step guidline for extracting statistical information for weighted data using *survey* R package"
+image: "img/Nigeria_GWP2021_ncdr_edu_histogram.gif"
+twitter-card: 
+  image: "img/Nigeria_GWP2021_ncdr_edu_histogram.gif"
+open-graph: 
+  image: "img/Nigeria_GWP2021_ncdr_edu_histogram.gif"
+categories: 
+  - r
+  - survey
+  - weighted data
+  - statistical analysis
+  - visualization
+  - DQQ
+  - GAIN
+---
+
+## Introduction
+
+This document explains the detailed analysis of **Nigeria DQQ survey data**. Nigeria DQQ survey study was conducted to address some of the gaps in diet quality data in Nigeria, by assessing diet quality at state level using the DQQ. The specific objectives of the study were to: 1. Measure MDD-W, NCDs-Protect, NCDs-Risk, and GDR scores, and All-5 at state level using the DQQ02 and describe state level diet quality. 2. Compare diet quality of men and women and of urban and rural dwellers. 3. Determine food access at state level.
+
+## A quick look into the metadata
+
+Let's jump straight into the analysis workflow for survey data in R environment. We can use functions from R packages `sjPlot`, `surveytoolbox`, and `labelled` to explore and extract information from the SPSS, SAS and STATA data files. Specifically, `view_df` function from `sjPlot` is a quick and efficient way to overview variable ID number, name, label, type and associated value labels.
+
+First, we need to load all required libraries into our working environment in R
+
+```{r}
+#| label: Loading required libraries
+#| warning: false
+#| output: false
+#| include: true
+#| echo: fenced
+#| code-fold: true
+
+
+#install.packages("sjPlot")
+#install.packages("devtools")
+#devtools::install_github("martinctc/surveytoolbox")
+
+library(haven)
+library(expss)
+library(tidyverse)
+library(foreign)
+library(survey)
+library(plotrix)
+library(labelled)
+library(surveytoolbox)
+library(sjPlot)
+library(camcorder)
+library(sysfonts)
+library(showtext)
+```
+
+```{r}
+#| include: true
+#| output: true 
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+file_path <- "input/Nigeria DQQ Survey HH & Indiv Data Merged.dta"
+d <- read_dta(file_path)
+```
+
+Checking metadata in a clean table for `i4` and `i3` variables.
+
+```{r}
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+d %>%
+  select(i4, i3) %>%
+  sjPlot::view_df(
+  alternate.rows = T,
+  CSS = list(css.table = "border: 2px solid;",
+                   css.tdata = "border: 1px solid;",
+                   css.arc = "color:blue;"),
+  
+)
+```
+
+## Data cleaning and preparation
+
+The first data cleaning step is to change some names in DQQ variables and make them easier to use for further analysis. Arbitrary function `varname` is created to manipulate only main DQQ variables' names.
+
+```{r}
+#| output: true
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+
+varname <- function(txt) {
+  ifelse(
+   txt %in% c("DQQ_06_1_Green_leafy_vegetables", 
+              "DQQ_06_2_Green_leafy_vegetables", 
+              "DQQ_10_1_Other_fruits",
+              "DQQ_10_2_Other_fruits"),
+    gsub("^(.*)(.)$", "\\1_\\2", gsub("_", "", substr(txt, 1, 8))),
+    gsub("_", "", substr(txt, 1, 6))
+  )
+}
+
+d %<>%
+  rename_with(.fn = varname, .cols = starts_with("DQQ_", ignore.case = FALSE))
+```
+
+Check first five rows for first 5 DQQ values only.
+
+```{r}
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+d %>%
+  select(DQQ01:DQQ05) %>%
+  head()
+```
+
+## Main calculation code blocks for food groups
+
+Two core R functions are employed for calculation of food groups. These are `case_when` function from `dplyr` to distinguishes between **yes** and **no** answers, and `ifelse` base R for cases when a cumulative score should be evaluated against a threshold (For instance, for *MDD-W* and its threshold on *DDS = 5*)
+
+```{r}
+#| output: true
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+# DDS
+d %<>% 
+  mutate(
+    dds = 
+      case_when(DQQ01 == 0 & DQQ02 == 0 & DQQ03 == 0 ~ 0L, DQQ01 == 1 | DQQ02 == 1 | DQQ03 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ04 == 0 ~ 0L, DQQ04 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ21 == 0 ~ 0L, DQQ21 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ14 == 0 & DQQ15 == 0 & DQQ25 == 0 ~ 0L, DQQ14 == 1 | DQQ15 == 1 | DQQ25 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ16 == 0 & DQQ17 == 0 & DQQ18 == 0 & DQQ19 == 0 & DQQ20 == 0 ~ 0L, DQQ16 == 1 | DQQ17 == 1 | 
+                  DQQ18 == 1 | DQQ19 == 1 | DQQ20 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ13 == 0 ~ 0L, DQQ13 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ06_1 == 0 & DQQ06_2 == 0 ~ 0L, DQQ06_1 == 1 | DQQ06_2 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ05 == 0 & DQQ08 == 0 ~ 0L, DQQ05 == 1 | DQQ08 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ07 == 0 ~ 0L, DQQ07 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ09 == 0 & DQQ10_1 == 0 & DQQ10_2 == 0 ~ 0L, DQQ09 == 1 | DQQ10_1 == 1 | DQQ10_2 == 1 ~ 1L, TRUE ~ NA)
+  )
+
+#MDD-W 
+d$mddw <- ifelse((case_when(d$DQQ01 == 0 & d$DQQ02 == 0 & d$DQQ03 == 0 ~ 0L, d$DQQ01 == 1 | 
+                              d$DQQ02 == 1 | d$DQQ03 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ04 == 0 ~ 0L, d$DQQ04 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ21 == 0 ~ 0L, d$DQQ21 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ14 == 0 & d$DQQ15 == 0 & d$DQQ25 == 0 ~ 0L, d$DQQ14 == 1 | d$DQQ15 == 1 | 
+                                d$DQQ25 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ16 == 0 & d$DQQ17 == 0 & d$DQQ18 == 0 & d$DQQ19 == 0 & d$DQQ20 == 0 ~ 0L, 
+                              d$DQQ16 == 1 | d$DQQ17 == 1 | d$DQQ18 == 1 | d$DQQ19 == 1 | d$DQQ20 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ13 == 0 ~ 0L, d$DQQ13 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ06_1 == 0 & d$DQQ06_2 == 0 ~ 0L, d$DQQ06_1 == 1 | d$DQQ06_2 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ05 == 0 & d$DQQ08 == 0 ~ 0L, d$DQQ05 == 1 | d$DQQ08 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ07 == 0 ~ 0L, d$DQQ07 == 1 ~ 1L, TRUE ~ NA) + 
+                    case_when(d$DQQ09 == 0 & d$DQQ10_1 == 0 & d$DQQ10_2 == 0 ~ 0L, d$DQQ09 == 1 | d$DQQ10_1 == 1 | 
+                                d$DQQ10_2 == 1 ~ 1L, TRUE ~ NA)) >= 5 & d$gender == 0 &  d$hr5 >= 15 & d$hr5 <= 49, 1, 
+                 
+                 ifelse((case_when(d$DQQ01 == 0 & d$DQQ02 == 0 & d$DQQ03 == 0 ~ 0L, d$DQQ01 == 1 | d$DQQ02 == 1 | 
+                                     d$DQQ03 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ04 == 0 ~ 0L, d$DQQ04 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ21 == 0 ~ 0L, d$DQQ21 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ14 == 0 & d$DQQ15 == 0 & d$DQQ25 == 0 ~ 0L, d$DQQ14 == 1 | d$DQQ15 == 1 | 
+                                       d$DQQ25 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ16 == 0 & d$DQQ17 == 0 & d$DQQ18 == 0 & d$DQQ19 == 0 & d$DQQ20 == 0 ~ 0L, 
+                                     d$DQQ16 == 1 | d$DQQ17 == 1 | d$DQQ18 == 1 | d$DQQ19 == 1 | d$DQQ20 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ13 == 0 ~ 0L, d$DQQ13 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ06_1 == 0 & d$DQQ06_2 == 0 ~ 0L, d$DQQ06_1 == 1 | d$DQQ06_2 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ05 == 0 & d$DQQ08 == 0 ~ 0L, d$DQQ05 == 1 | d$DQQ08 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ07 == 0 ~ 0L, d$DQQ07 == 1 ~ 1L, TRUE ~ NA) + 
+                           case_when(d$DQQ09 == 0 & d$DQQ10_1 == 0 & d$DQQ10_2 == 0 ~ 0L, d$DQQ09 == 1 | d$DQQ10_1 == 1 | 
+                                       d$DQQ10_2 == 1 ~ 1L, TRUE ~ NA)) < 5 & d$gender == 0 &  d$hr5 >= 15 & d$hr5 <= 49, 0, NA)) 
+
+#All-5  ----
+d$all5 <- ifelse((
+  case_when(d$DQQ01 == 0 & d$DQQ02 == 0 & d$DQQ03 == 0 ~ 0L, d$DQQ01 == 1 | 
+              d$DQQ02 == 1 | d$DQQ03 == 1 ~ 1L, TRUE ~ NA) +
+    case_when(d$DQQ05 == 0 & d$DQQ06_1 == 0 & d$DQQ06_2 == 0 & d$DQQ07 == 0 ~ 0L, 
+              d$DQQ05 == 1 | d$DQQ06_1 == 1 | d$DQQ06_2 == 1 | d$DQQ07 == 1 ~ 1L, TRUE ~ NA) + 
+    case_when(d$DQQ08 == 0 & d$DQQ09 == 0 & d$DQQ10_1 == 0 & d$DQQ10_2 == 0 ~ 0L, 
+              d$DQQ08 == 1 | d$DQQ09 == 1 | d$DQQ10_1 == 1 | d$DQQ10_2 == 1 ~ 1L, TRUE ~ NA) + 
+    case_when(d$DQQ04 == 0 & d$DQQ21 == 0 ~ 0L, d$DQQ04 == 1 | d$DQQ21 == 1 ~ 1L, TRUE ~ NA) +
+    case_when(d$DQQ13 == 0 & d$DQQ14 == 0 & d$DQQ15 == 0 & d$DQQ16 == 0 & d$DQQ17 == 0 & 
+                d$DQQ18 == 0 & d$DQQ19 == 0 & d$DQQ20 == 0 & d$DQQ25 == 0 ~ 0L, 
+              d$DQQ13 == 1 | d$DQQ14 == 1 | d$DQQ15 == 1 | d$DQQ16 == 1 | d$DQQ17 == 1 | 
+                d$DQQ18 == 1 | d$DQQ19 == 1 | d$DQQ20 == 1 | d$DQQ25 == 1 ~ 1L, TRUE ~ NA)) == 5, 1, 0)
+
+#At least one vegetable  ----
+d %<>% mutate(
+  all5a = case_when(DQQ05 == 0 & DQQ06_1 == 0 & DQQ06_2 == 0 & DQQ07 == 0 ~ 0L, 
+                    DQQ05 == 1 | DQQ06_1 == 1 | DQQ06_2 == 1 | DQQ07 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#At least one fruit  ----
+d %<>% mutate(
+  all5b = case_when(DQQ08 == 0 & DQQ09 == 0 & DQQ10_1 == 0 & DQQ10_2 == 0 ~ 0L, 
+                    DQQ08 == 1 | DQQ09 == 1 | DQQ10_1 == 1 | DQQ10_2 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#At least one pulse, nut or seed  ----
+d %<>% mutate(
+  all5c = case_when(DQQ04 == 0 & DQQ21 == 0 ~ 0L, DQQ04 == 1 | DQQ21 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#At least one animal-source food (ASF)  ----
+d %<>% mutate(
+  all5d = case_when(DQQ13 == 0 & DQQ14 == 0 & DQQ15 == 0 & DQQ16 == 0 & DQQ17 == 0 & 
+                      DQQ18 == 0 & DQQ19 == 0 & DQQ20 == 0 & DQQ25 == 0 ~ 0L, 
+                    DQQ13 == 1 | DQQ14 == 1 | DQQ15 == 1 | DQQ16 == 1 | DQQ17 == 1 | 
+                      DQQ18 == 1 | DQQ19 == 1 | DQQ20 == 1 | DQQ25 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#At least starchy staple  ----
+d %<>% mutate(
+  all5e = case_when(DQQ01 == 0 & DQQ02 == 0 & DQQ03 == 0 ~ 0L, DQQ01 == 1 
+                    | DQQ02 == 1 | DQQ03 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#NCD-Protect score  ----
+d %<>%
+  mutate(
+    ncdp = 
+      case_when(DQQ02 == 0 ~ 0L, DQQ02 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ04 == 0 ~ 0L, DQQ04 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ21 == 0 ~ 0L, DQQ21 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ05 == 0 ~ 0L, DQQ05 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ06_1 == 0 & DQQ06_2 == 0 ~ 0L, DQQ06_1 == 1 | 
+                  DQQ06_2 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ07 == 0 ~ 0L, DQQ07 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ08 == 0 ~ 0L, DQQ08 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ09 == 0 ~ 0L, DQQ09 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ10_1 == 0 & DQQ10_2 == 0 ~ 0L, DQQ10_1 == 1 |
+                  DQQ10_2 == 1 ~ 1L, TRUE ~ NA)
+  )
+
+#NCD-Risk score  ----
+d %<>%
+  mutate(
+    ncdr = 
+      case_when(DQQ28 == 0 ~ 0L, DQQ28 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ11 == 0 ~ 0L, DQQ11 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ12 == 0 ~ 0L, DQQ12 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ16 == 0 ~ 0L, DQQ16 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ16 == 0 ~ 0L, DQQ16 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ17 == 0 & DQQ18 == 0 ~ 0L, DQQ17 == 1 | 
+                  DQQ18 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ24 == 0 ~ 0L, DQQ24 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ23 == 0 & DQQ29 == 0 ~ 0L, DQQ23 == 1 | 
+                  DQQ29 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ22 == 0 ~ 0L, DQQ22 == 1 ~ 1L, TRUE ~ NA) 
+  )
+
+#GDR score  ----
+d %<>%
+  mutate(
+    gdr = 
+      case_when(DQQ02 == 0 ~ 0L, DQQ02 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ04 == 0 ~ 0L, DQQ04 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ21 == 0 ~ 0L, DQQ21 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ05 == 0 ~ 0L, DQQ05 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ06_1 == 0 & DQQ06_2 == 0 ~ 0L, DQQ06_1 == 1 | 
+                  DQQ06_2 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ07 == 0 ~ 0L, DQQ07 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ08 == 0 ~ 0L, DQQ08 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ09 == 0 ~ 0L, DQQ09 == 1 ~ 1L, TRUE ~ NA) + 
+      case_when(DQQ10_1 == 0 & DQQ10_2 == 0 ~ 0L, DQQ10_1 == 1 | 
+                  DQQ10_2 == 1 ~ 1L, TRUE ~ NA) -
+      case_when(DQQ28 == 0 ~ 0L, DQQ28 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ11 == 0 ~ 0L, DQQ11 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ12 == 0 ~ 0L, DQQ12 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ16 == 0 ~ 0L, DQQ16 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ16 == 0 ~ 0L, DQQ16 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ17 == 0 & DQQ18 == 0 ~ 0L, DQQ17 == 1 | 
+                  DQQ18 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ24 == 0 ~ 0L, DQQ24 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ23 == 0 & DQQ29 == 0 ~ 0L, DQQ23 == 1 | 
+                  DQQ29 == 1 ~ 1L, TRUE ~ NA) - 
+      case_when(DQQ22 == 0 ~ 0L, DQQ22 == 1 ~ 1L, TRUE ~ NA) + 
+      9
+  )
+
+#DQQ score  ----
+  #Not applicable for this stage
+
+#Zero vegetable or fruit   ----
+d %<>% mutate(
+  zvegfr = case_when(DQQ05 == 0 & DQQ06_1 == 0 & DQQ06_2 == 0 
+                     & DQQ07 == 0 | DQQ08 == 0 & DQQ09 == 0 & DQQ10_1 == 0 & DQQ10_2 == 0 ~ 1L, 
+                     DQQ05 == 1 | DQQ06_1 == 1 | DQQ06_2 == 1 | 
+                       DQQ07 == 1 | DQQ08 == 1 | DQQ09 == 1 | DQQ10_1 == 1 | DQQ10_2 == 1 ~ 0L, TRUE ~ NA)
+)
+
+#ASF consumption ----
+d %<>% mutate(
+  asf = case_when(DQQ13 == 0 & DQQ14 == 0 & DQQ15 == 0 & DQQ17 == 0 & 
+                    DQQ18 == 0 & DQQ19 == 0 & DQQ20 == 0 & DQQ25 == 0 ~ 0L, 
+                  DQQ13 == 1 | DQQ14 == 1 | DQQ15 == 1 | DQQ17 == 1 | 
+                    DQQ18 == 1 | DQQ19 == 1 | DQQ20 == 1 | DQQ25 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Sweet beverage ----
+d %<>% mutate(
+  swtbev = case_when(DQQ26 == 0 & DQQ27 == 0 & DQQ28 == 0 ~ 0L, 
+                     DQQ26 == 1 | DQQ27 == 1 | DQQ28 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Soft drink consumption  ----
+d %<>% mutate(
+  sofdr = case_when(DQQ28 == 0 ~ 0L, DQQ28 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Sweet foods consumption   ----
+d %<>% mutate(
+  swtfd = case_when(DQQ11 == 0 & DQQ12 == 0 ~ 0L, 
+                    DQQ11 == 1 | DQQ12 == 1 ~ 1L, TRUE ~ NA) 
+)
+
+#Salty or fried snack consumption   ----
+d %<>% mutate(
+  safd = case_when(DQQ22 == 0 & DQQ23 == 0 & DQQ24 == 0 ~ 0L, 
+                   DQQ22 == 1 | DQQ23 == 1 | DQQ24 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Whole grain consumption   ----
+d %<>% mutate(
+  wgrn = case_when(DQQ02 == 0 ~ 0L, DQQ02 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Pulse consumption   ----
+d %<>% mutate(
+  pls = case_when(DQQ04 == 0 ~ 0L, DQQ04 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Nuts and seeds consumption   ----
+d %<>% mutate(
+  nut = case_when(DQQ21 == 0 ~ 0L, DQQ21 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Processed meat consumption   ----
+d %<>% mutate(
+  pmeat = case_when(DQQ16 == 0 ~ 0L, DQQ16 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Percent consuming each food group   ----
+#a. at least one vegetable or fruit   ----
+d %<>% mutate(
+  vegfr = case_when(DQQ05 == 0 & DQQ06_1 == 0 & DQQ06_2 == 0 & 
+                      DQQ07 == 0 & DQQ08 == 0 & DQQ09 == 0 & DQQ10_1 == 0 & DQQ10_2 == 0 ~ 0L, 
+                    DQQ05 == 1 | DQQ06_1 == 1 | DQQ06_2 == 1 | 
+                      DQQ07 == 1 | DQQ08 == 1 | DQQ09 == 1 | DQQ10_1 == 1 | DQQ10_2 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#b. Salty snacks, instant noodles, or fast food  ----
+d %<>% mutate(
+  snf = case_when(DQQ22 == 0 & DQQ23 == 0 & DQQ29 == 0 ~ 0L, 
+                  DQQ22 == 1 | DQQ23 == 1 | DQQ29 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#ome complementary indicators ----
+#Dairy ----
+d %<>% mutate(
+  dairy = case_when(DQQ14 == 0 & DQQ15 == 0 & DQQ25 == 0 ~ 0L, 
+                    DQQ14 == 1 | DQQ15 == 1 | DQQ25 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Dark green leafy vegetables ----
+d %<>% mutate(
+  dveg = case_when(DQQ06_1 == 0 & DQQ06_2 == 0 ~ 0L, 
+                   DQQ06_1 == 1 | DQQ06_2 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Meat, poultry, or fish ----
+d %<>% mutate(
+  anml = case_when(DQQ16 == 0 & DQQ17 == 0 & DQQ18 == 0 & 
+                     DQQ19 == 0 & DQQ20 == 0 ~ 0L, 
+                   DQQ16 == 1 | DQQ17 == 1 | DQQ18 == 1 | 
+                     DQQ19 == 1 | DQQ20 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Other fruits ----
+d %<>% mutate(
+  ofr = case_when(DQQ10_1 == 0 & DQQ10_2 == 0 ~ 0L, 
+                  DQQ10_1 == 1 | DQQ10_2 == 1 ~ 1L, TRUE ~ NA) 
+)
+
+#Other vegetables ----
+d %<>% mutate(
+  oveg = case_when(DQQ07 == 0 ~ 0L, 
+                   DQQ07 == 1 ~ 1L, TRUE ~ NA)
+)
+
+#Salty snacks, instant noodles, or fast food (including deep fried) ----
+d %<>% mutate(
+  snfd = case_when(DQQ22 == 0 & DQQ23 == 0 & DQQ24 == 0 & DQQ29 == 0 ~ 0L, 
+                   DQQ22 == 1 | DQQ23 == 1 | DQQ24 == 1 | DQQ29 == 0 ~ 1L, TRUE ~ NA)
+)
+
+#Unprocessed red meat ----
+d %<>% mutate(
+  umeat = case_when(DQQ17 == 0 & DQQ18 == 0 ~ 0L, 
+                    DQQ17 == 1 | DQQ18 == 1 ~ 1L, TRUE ~ NA) 
+)
+
+d %>%
+  select(dds, mddw, all5, ncdp, ncdr, gdr, sofdr) %>%
+  head()
+```
+
+When reading a data set using `haven`, variables have labels and other metadata attached as attributes. If a variable contains labelled values it will be imported as a haven_labelled vector, which stores the variable labels in the labels attribute. First use `class` and `head` functions to see value labels and then check for any missing values in `i3` and `i4` which are job and education classification variables.
+
+Than we can use `add_labels` from `sjlabelled` package to replace value labels with shorter ones, and then factorizing and ordering them based on their original order.
+
+```{r}
+#| output: false
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+# Checking format and value labels
+class(d$i4)
+head(d$i4)
+
+# Check for missing values
+d %>% count(i4, is.na(i4)) # job sector 
+d %>% count(i3, is.na(i3)) # level of education
+
+# There is an undefined value in education level. 
+table(labelled::to_factor(d$i3))
+
+#Lets call it undefined category for now.
+d$i3 <- sjlabelled::add_labels(d$i3, labels = c(
+  `Junior Secondary` = 3,
+  `Senior Secondary` = 4,
+  `Higher Education` = 5,
+  `Undefined` = 6)
+  )
+
+d$i4 <- sjlabelled::add_labels(
+  d$i4, labels = c(
+  "Not working" = 1,
+  "Professional and Technical" = 2,
+  "Administrative and Managerial" = 3,
+  "Office and Admin" = 4,
+  "Sales" = 5,
+  "Service" = 6,
+  "Installations and Maintenance" = 7 ,
+  "Craft and Trade" = 8,
+  "Agriculture and Fishery" = 9, 
+  "Production and Construction" = 10,
+  "Elementary" = 11,
+  "Others" = 12,
+  "Don’t know" = 13
+  )
+)
+
+# Convert to factors, using the labels as levels
+# Labels that don’t exist in the data can be dropped from the levels using drop_unused_labels = TRUE.
+d$job <- labelled::to_factor(d$i4, levels = "labels", ordered = TRUE, 
+                             sort_levels = 'none', decreasing = FALSE, drop_unused_labels = TRUE)
+d$edu <- labelled::to_factor(d$i3, levels = "labels", ordered = TRUE, 
+                             sort_levels = 'none', decreasing = FALSE, drop_unused_labels = TRUE)
+d$reg <- labelled::to_factor(d$strata, levels = "labels", ordered = TRUE, 
+                             sort_levels = 'none', decreasing = FALSE, drop_unused_labels = TRUE)
+table(d$edu)
+
+# Other ways also work
+gender <- fct_collapse(as.factor(d$gender), "Male" = "1", "Female" = "0")
+d$gender <- gender
+d$Residence <- ifelse(d$sector == 1, "Urban", ifelse(d$sector == 2, "Rural", NA)) 
+
+```
+
+## Complex survey design
+
+Here `survey` R package is used to create complex design objects based on weights provided by GALLUP.
+
+```{r}
+#| warning: false
+#| output: false
+#| echo: fenced
+#| code-fold: true
+
+options(survey.lonely.psu = "adjust")
+d <- data.frame(d)
+
+d_m <- d[d$gender == "Male", ]
+d_f <- d[d$gender == "Female", ]
+d_u <- d[which(d$Residence == "Urban"), ]
+d_r <- d[which(d$Residence == "Rural"), ]
+
+d_w <- svydesign(ids = ~interview__id, strata = ~strata, nest = FALSE, weights = ~hh_weight, data =  d)
+d_m_w <- svydesign(ids = ~interview__id, strata = ~strata, nest = FALSE, weights = ~hh_weight, data = d_m)
+d_f_w <- svydesign(ids = ~interview__id, strata = ~strata, nest = FALSE, weights = ~hh_weight, data = d_f)
+d_u_w <- svydesign(ids = ~interview__id, strata = ~strata, nest = FALSE, weights = ~hh_weight, data = d_u)
+d_r_w <- svydesign(ids = ~interview__id, strata = ~strata, nest = FALSE, weights = ~hh_weight, data = d_r)
+
+result1 <- setNames(data.frame(matrix(ncol = 9, nrow = 1)), 
+                    c("Subgroup", "Variable", "Mean_prevalence", "Lower_95_CI", "Upper_95_CI", "Difference", "Diff_LCI", "Diff_UCI", "Diff_p"))
+result2 <- setNames(data.frame(matrix(ncol = 9, nrow = 1)), 
+                    c("Subgroup", "Variable", "Mean_prevalence", "Lower_95_CI", "Upper_95_CI", "Difference", "Diff_LCI", "Diff_UCI", "Diff_p"))
+
+for(i in c("dds", "ncdp", "ncdr", "gdr")){
+      x <- svymean(~d[, i], d_w, na.rm = TRUE, method = "as", df=degf(d_w))
+      x_LCI <- confint(x)[1]
+      x_UCI <- confint(x)[2]
+      result1 <- rbind(result1, c("All", 
+                                  i,
+                                  round(x, digits = 2), 
+                                  round(x_LCI, digits = 2), 
+                                  round(x_UCI, digits = 2), NA, NA, NA, NA))
+      #  # Male
+      x <- svymean(~d_m[, i],  d_m_w, na.rm = TRUE, method = "as", df=degf(d_m_w))
+      x_LCI <- confint(x)[1]
+      x_UCI <- confint(x)[2]
+      varname <- as.name(i)
+      t <- eval(bquote(svyttest(.(varname)~gender, d_w)))
+      result1 <- rbind(result1, c("Male", 
+                                  i, 
+                                  round(x, digits = 2), 
+                                  round(x_LCI, digits = 2), 
+                                  round(x_UCI, digits = 2),
+                                  as.numeric(round(t$estimate, digits = 2)), 
+                                  as.numeric(round(t$conf.int[1], digits = 2)), 
+                                  as.numeric(round(t$conf.int[2], digits = 2)), 
+                                  as.numeric(round(t$p.value, digits = 2))))
+      
+      #  # Female
+      x <- svymean(~d_f[, i],  d_f_w, na.rm = TRUE, method = "as", df=degf(d_f_w))
+      x_LCI <- confint(x)[1]
+      x_UCI <- confint(x)[2]
+      result1 <- rbind(result1, c("Female", 
+                                  i,
+                                  round(x, digits = 2), 
+                                  round(x_LCI, digits = 2), 
+                                  round(x_UCI, digits = 2),
+                                  as.numeric(round(t$estimate, digits = 2)), 
+                                  as.numeric(round(t$conf.int[1], digits = 2)), 
+                                  as.numeric(round(t$conf.int[2], digits = 2)), 
+                                  as.numeric(round(t$p.value, digits = 2))))
+      
+      #  # Urban
+      x <- svymean(~d_u[, i],  d_u_w, na.rm = TRUE, method = "as", df=degf(d_u_w))
+      x_LCI <- confint(x)[1]
+      x_UCI <- confint(x)[2]
+      varname <- as.name(i)
+      t <- eval(bquote(svyttest(.(varname)~Residence, d_w)))
+      result1 <- rbind(result1, c("Urban", 
+                                  i,
+                                  round(x, digits = 2), 
+                                  round(x_LCI, digits = 2), 
+                                  round(x_UCI, digits = 2),
+                                  as.numeric(round(t$estimate, digits = 2)), 
+                                  as.numeric(round(t$conf.int[1], digits = 2)), 
+                                  as.numeric(round(t$conf.int[2], digits = 2)), 
+                                  as.numeric(round(t$p.value, digits = 2))))
+      
+      #  # Rural
+      x <- svymean(~d_r[, i],  d_r_w, na.rm = TRUE, method = "as", df=degf(d_r_w))
+      x_LCI <- confint(x)[1]
+      x_UCI <- confint(x)[2]
+      result1 <- rbind(result1, c("Rural", 
+                                  i,
+                                  round(x, digits = 2), 
+                                  round(x_LCI, digits = 2), 
+                                  round(x_UCI, digits = 2),
+                                  as.numeric(round(t$estimate, digits = 2)), 
+                                  as.numeric(round(t$conf.int[1], digits = 2)), 
+                                  as.numeric(round(t$conf.int[2], digits = 2)), 
+                                  as.numeric(round(t$p.value, digits = 2))))
+      
+    }
+
+#prevalence
+for(i in c("all5", "all5a", "all5b", "all5c", "all5d", "all5e", "DQQ11", "DQQ14", "DQQ09", "dairy", "dveg", "DQQ24", "DQQ13", 
+               "DQQ29", "DQQ20", "DQQ01", "DQQ27", "DQQ23", "mddw", "anml", "DQQ25", "DQQ21", "ofr", "DQQ12", "oveg", "DQQ22", 
+               "DQQ19", "DQQ16", "DQQ04", "safd", "snf", "swtbev", "DQQ28", "swtfd", "DQQ26", "umeat", "DQQ18", "DQQ17",
+               "DQQ08", "DQQ05", "DQQ03", "DQQ02", "DQQ15", "zvegfr")){ 
+      # All
+      x <- svyciprop(~I(d[, i] == 1), d_w, na.rm = TRUE, method = "as", df=degf(d_w))
+      x_LCI <- attributes(x)$ci[1]
+      x_UCI <- attributes(x)$ci[2]
+      result2 <- rbind(result2, c("All", 
+                                  i, 
+                                  round(x*100, digits = 2), 
+                                  round(x_LCI*100, digits = 2), 
+                                  round(x_UCI*100, digits = 2), NA, NA, NA, NA))
+      # Male and Female
+      x <- svyciprop(~I(d_m[, i] == 1), d_m_w, na.rm = TRUE, method = "as", df=degf(d_m_w))
+      x_LCI <- attributes(x)$ci[1]
+      x_UCI <- attributes(x)$ci[2]
+      
+      y <- svyciprop(~I(d_f[, i] == 1), d_f_w, na.rm = TRUE, method = "as", df=degf(d_f_w))
+      y_LCI <- attributes(y)$ci[1]
+      y_UCI <- attributes(y)$ci[2]
+      
+      varname <- as.name(i)
+      ifelse(x == 0 & y == 0, t <- NA, t <- eval(bquote(svychisq(~.(varname)+gender,d_w))))
+      
+      result2 <- rbind(result2, c("Male", 
+                                  i, 
+                                  round(x*100, digits = 2), 
+                                  round(x_LCI*100, digits = 2), 
+                                  round(x_UCI*100, digits = 2),
+                                  round((x-y)*100, digits = 2), 
+                                  NA, 
+                                  NA, 
+                                  ifelse(is.na(t), NA, round(as.numeric(t$p.value), digits = 2))))
+      
+      result2 <- rbind(result2, c("Female", 
+                                  i, 
+                                  round(y*100, digits = 2), 
+                                  round(y_LCI*100, digits = 2), 
+                                  round(y_UCI*100, digits = 2), 
+                                  round((x-y)*100, digits = 2),
+                                  round((x-y)*100, digits = 2), 
+                                  NA, 
+                                  NA, 
+                                  ifelse(is.na(t), NA, round(as.numeric(t$p.value), digits = 2))))
+      
+      # Rural and Urban
+      x <- svyciprop(~I(d_u[, i] == 1), d_u_w, na.rm = TRUE, method = "as", df=degf(d_u_w))
+      x_LCI <- attributes(x)$ci[1]
+      x_UCI <- attributes(x)$ci[2]
+      
+      y <- svyciprop(~I(d_r[, i] == 1), d_r_w, na.rm = TRUE, method = "as", df=degf(d_r_w))
+      y_LCI <- attributes(y)$ci[1]
+      y_UCI <- attributes(y)$ci[2]
+      
+      varname <- as.name(i)
+      ifelse(x == 0 & y == 0, t <- NA, t <- eval(bquote(svychisq(~.(varname)+Residence,d_w))))
+      
+      result2 <- rbind(result2, c("Urban", 
+                                  i,
+                                  round(x*100, digits = 2), 
+                                  round(x_LCI*100, digits = 2), 
+                                  round(x_UCI*100, digits = 2),
+                                  round((x-y)*100, digits = 2), 
+                                  NA, 
+                                  NA, 
+                                  ifelse(is.na(t), NA, round(as.numeric(t$p.value), digits = 2))))
+      
+      result2 <- rbind(result2, c("Rural", 
+                                  i, 
+                                  round(y*100, digits = 2), 
+                                  round(y_LCI*100, digits = 2), 
+                                  round(y_UCI*100, digits = 2),
+                                  round((x-y)*100, digits = 2), 
+                                  NA, 
+                                  NA, 
+                                  ifelse(is.na(t), NA, round(as.numeric(t$p.value), digits = 2))))
+      
+    }    
+
+
+resultlist1 <- c()
+resultlist2 <- c()
+result1 <- result1[-1,]
+resultlist1 <- c(resultlist1,result1)
+result2 <- result2[-1,]
+resultlist2 <- c(resultlist2,result2)
+resultlist1 <- data.frame(resultlist1)      
+resultlist2  <- data.frame(resultlist2)
+colnames(resultlist1) <- colnames(resultlist2)
+results <- rbind(resultlist1, resultlist2)
+results <- results %>%
+  mutate(
+    Unit = case_when(Variable %in% c("dds", "ncdp", "ncdr", "gdr") ~ "Score",
+                     .default = "Percentage")
+  )
+
+# Long Names format
+longNames <- c(all5 = "All-5", 
+               all5a = "At least one vegetable",
+               all5b = "At least one fruit",
+               all5c = "At least one pulse, nut, or seed",
+               all5d = "At least one animal-source food",
+               all5e = "At least one starchy staple food",
+               dds = "Dietary diversity score",
+               ncdp = "NCD-Protect",
+               ncdr = "NCD-Risk",
+               gdr = "GDR score",
+               DQQ11 = "Baked or grain-based sweets",
+               DQQ14 = "Cheese",
+               DQQ09 = "Citrus",
+               dairy = "Dairy",
+               dveg = "Dark green leafy vegetables",
+               DQQ24 = "Deep fried foods",
+               DQQ13 = "Eggs",
+               DQQ29 = "Fast food", 
+               DQQ20 = "Fish or seafood",
+               DQQ01 = "Foods made from grains",
+               DQQ27 = "Fruit juice and fruit drinks",
+               DQQ23 = "Instant noodles",
+               mddw = "MDD-W",
+               anml = "Meat, poultry, or fish",
+               DQQ25  = "Milk",
+               DQQ21 = "Nuts or seeds",
+               ofr = "Other fruits",
+               DQQ12 = "Other sweets",
+               oveg = "Other vegetables",
+               DQQ22 = "Packaged ultra-processed salty snacks",
+               DQQ19 = "Poultry",
+               DQQ16 = "Processed meats",
+               DQQ04  = "Pulses",
+               safd = "Salty or fried snacks",
+               snf = "Salty snacks, instant noodles, or fast food",
+               swtbev = "Sweet beverages",
+               DQQ28 = "Soft drink consumption",
+               swtfd = "Sweet foods",
+               DQQ26  = "Sweet tea, coffee, or cocoa",
+               umeat = "Unprocessed red meat",
+               DQQ18 = "Unprocessed red meat (non-ruminants)",
+               DQQ17 = "Unprocessed red meat (ruminants)",
+               DQQ08 = "Vitamin A-rich fruits",
+               DQQ05 = "Vitamin A-rich orange vegetables",
+               DQQ03 = "White roots or tubers",
+               DQQ02  = "Whole grains",
+               DQQ15  = "Yogurt",
+               zvegfr= "Zero vegetable or fruit consumption"
+)
+
+# DQQ names
+dqqNames <- c(DQQ11 = "DQQ11",
+              DQQ14 = "DQQ14",
+              DQQ09 = "DQQ9",
+              dveg = "DQQ6",
+              DQQ24 = "DQQ24",
+              DQQ13 = "DQQ13",
+              DQQ29 = "DQQ29", 
+              DQQ20 = "DQQ20",
+              DQQ01 = "DQQ1",
+              DQQ27 = "DQQ27",
+              DQQ23 = "DQQ23",
+              DQQ25  = "DQQ25",
+              DQQ21 = "DQQ21",
+              ofr = "DQQ10",
+              DQQ12 = "DQQ12",
+              oveg = "DQQ7",
+              DQQ22 = "DQQ22",
+              DQQ19 = "DQQ19",
+              DQQ16 = "DQQ16",
+              DQQ04  = "DQQ4",
+              DQQ28 = "DQQ28",
+              DQQ26  = "DQQ26",
+              DQQ18 = "DQQ18",
+              DQQ17 = "DQQ17",
+              DQQ08 = "DQQ8",
+              DQQ05 = "DQQ5",
+              DQQ03 = "DQQ3",
+              DQQ02  = "DQQ2",
+              DQQ15  = "DQQ15"
+)
+
+#Cleaning and exporting ----
+results$Mean_prevalence <- as.numeric(results$Mean_prevalence)
+results$Lower_95_CI <- as.numeric(results$Lower_95_CI)
+results$Upper_95_CI <- as.numeric(results$Upper_95_CI)
+
+
+results <- results %>%
+  mutate(
+    DQQ_question = as.character(dqqNames[results$Variable]),
+    Variable = as.character(longNames[results$Variable]),
+    Mean_prevalence = case_when(Subgroup == "Male" & Variable == "MDD-W" ~ NA, .default = Mean_prevalence)
+  ) %>%
+  relocate(DQQ_question, .after = Variable) %>%
+  relocate(Unit, .after = DQQ_question) %>%
+  rename(Indicator = Variable)
+
+```
+
+## Exploratory Analysis
+
+Lets try first exploring the distribution of a food group, for instance NCD-Risk, across two factors, education level and job categories. We set font options for output graphs using `showtext` package and **Whitney** font face which has been preferred font for previous DQQ-based graphs.
+
+```{r}
+#| output: false
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+font_paths("font/whitney-2")
+font_add("Whitney", 
+          regular = "whitneybook.otf", 
+          bold = "whitneybold.otf",
+          italic = "whitneybookitalic.otf", 
+          bolditalic = "whitneysemibold.otf")
+showtext_auto()
+par(family = "Whitney")
+
+# Check for NAs 
+sum(is.na(d$ncdr)) # 0
+sum(is.na(d$edu)) # 2
+```
+
+In below graphs distributions of **NCD_Risk** and **NCD-Protect** are illustrated using `ggplot2` package. Categorical variables are useful for adding extra information on how data distributed, for instance across *education*, *job*, *region* and *gender*.
+
+```{r, fig.width= 12, fig.height= 8, dpi= 96}
+#| fig-cap: "Distrubution of NCD-Risk"
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+d %>%
+  filter(!is.na(edu)) %>%
+  ggplot(aes(x = ncdr, fill = edu)) +
+  geom_histogram(binwidth = 1) +
+  guides(fill = "none") +
+  facet_wrap(~edu) + 
+  labs(
+    x = "NCD-Risk values",
+    y = "Counts",
+    title = "Histogram of NCDR-Risk across education levels", 
+    subtitle = "Value of one used for binwidth to make bins side-by-side",
+    caption = ""
+  ) +
+  theme(
+    plot.background = element_rect(fill = "#e9ecef"), 
+    plot.title = element_text(family = "Whitney", face = "bold", size = 20, margin = margin(t = 0.05, unit = "cm")),
+    plot.subtitle = element_text(family = "Whitney", face = "italic", size = 16, margin = margin(b = 0.5, t = 0.1, unit = "cm")),
+    panel.background = element_rect(fill = "#f8f9fa", colour = "gray"), 
+    panel.grid = element_blank(),
+    panel.grid.minor.y = element_line(colour = "gray", linetype = 2),
+    panel.grid.major.y = element_line(colour = "gray", linetype = 4),
+    axis.title = element_text(family = "Whitney", face = "bold", size = 12),
+    axis.text = element_text(family = "Whitney", face = "bold", size = 10),
+    axis.title.x = element_text(family = "Whitney", face = "bold", size = 12, margin = margin(t = 0.5, unit = "cm")),
+    strip.background = element_rect(fill = "#e9ecef"),
+    strip.text = element_text(family = "Whitney", face= "bold", size = 14),
+    plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+  )
+```
+
+```{r, fig.width= 12, fig.height= 8, dpi= 96}
+#| fig-cap: "Distrubution of NCD-Protect"
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+# NCD-Protect on gender and regions
+d %>%
+  ggplot(aes(x = ncdp, fill = gender)) +
+  geom_histogram(
+    binwidth = 1, 
+    position = "identity", 
+    alpha = 0.5
+    ) +
+  scale_fill_manual(
+    values = c(
+      "Male" = "#00296b", 
+      "Female" = "#ffd500"
+      )
+  ) +
+  #guides(fill = "none") +
+  facet_wrap(~ reg, nrow = 2, ncol = 3, dir = "v") + 
+  labs(
+    x = "NCD-Protect values",
+    y = "Counts",
+    title = "Histogram of NCD-Protect across region and gender", 
+    subtitle = "Value of one used for binwidth to make bins side-by-side",
+    caption = ""
+  ) +
+  theme(
+    plot.background = element_rect(fill = "#e9ecef"), 
+    plot.title = element_text(family = "Whitney", face = "bold", size = 20, margin = margin(t = 0.05, unit = "cm")),
+    plot.subtitle = element_text(family = "Whitney", face = "italic", size = 16, margin = margin(b = 0.5, t = 0.1, unit = "cm")),
+    panel.background = element_rect(fill = "#f8f9fa", colour = "gray"), 
+    panel.grid = element_blank(),
+    panel.grid.minor.y = element_line(colour = "gray", linetype = 2),
+    panel.grid.major.y = element_line(colour = "gray", linetype = 4),
+    axis.title = element_text(family = "Whitney", face = "bold", size = 12),
+    axis.text = element_text(family = "Whitney", face = "bold", size = 10),
+    axis.title.x = element_text(family = "Whitney", face = "bold", size = 12, margin = margin(t = 0.5, unit = "cm")),
+    legend.title = element_blank(),
+    legend.position = c(0.94, 0.92),
+    legend.text = element_text(family = "Whitney", face = "bold", size = 12),
+    legend.background = element_rect(fill = "#f8f9fa"), 
+    strip.background = element_rect(fill = "#e9ecef"),
+    strip.text = element_text(family = "Whitney", face= "bold", size = 14),
+    plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+  )
+```
+
+We can use results of complex design objects to explore estimated population information based on weighted stratified data. The principal difficulty in designing graphics for complex survey data is representing the sampling weights. Three strategies could be used to overcome this difficulty: 1. Base the graph on an estimated population distribution. 2. Explicitly indicate weights on the graph. 3. Draw a simple random sample from the estimated population distribution and graph this sample instead. Here We start off by extracting some information on **mean population estimates NCD_Risk** from `svyby` which compute survey statistics on subsets of a survey defined by factor (education and job). `d_w` is used as the `svydesign` object which was defined in previous sections.
+
+We can use simple `barplot` function directly like the first plot, but it would be more effective to retrieve information and save it as `data.frame` and use `ggplot` functionality for graphing purposes.
+
+```{r, fig.width= 12, fig.height= 8, dpi= 96}
+#| fig-cap: "Population estimates for male and female"
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+barplot(svymean(~gender, d_w))
+```
+
+```{r, fig.width= 12, fig.height= 8, dpi= 96}
+#| output: false
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+ncdr_job_edu <- svyby(~ncdr, ~edu + job,
+                      svymean,
+                      design = d_w,
+                      keep.names = FALSE
+                      )
+
+ncdr_job_edu_df <- data.frame(ncdr_job_edu)
+ncdr_job_edu_df$job1 <- cat(str_wrap(ncdr_job_edu_df$job, width = 20))
+```
+
+```{r, fig.width= 12, fig.height= 8, dpi= 96}
+#| fig-cap: "NCD-Risk mean estimates based on stratified survey data"
+#| echo: fenced
+#| code-fold: true
+#| warning: false
+
+
+ncdr_job_edu_df %>%
+  filter(job != "Don’t know") %>%
+  ggplot()+
+  geom_point(aes(x= edu, y= ncdr, color= job, size = 0.5),
+          ) + 
+  scale_y_continuous(limits = c(0, 4), expand = c(0.1, 0.1)) +
+  guides(
+    color = "none",
+    size = "none"
+    ) +
+  facet_wrap(~job) +
+  labs(
+    x = "Level of completed education",
+    y = "NCD-Risk",
+    title = "NCD-Risk mean estimates across education and job categories", 
+    caption = "'Don’t know' responses was removed fom job categories",
+  ) +
+  theme(
+    plot.background = element_rect(fill = "#e9ecef"), 
+    plot.title = element_text(family = "Whitney", face = "bold", size = 20, margin = margin(t = 0.05, b = 1, unit = "cm")),
+    plot.caption = element_text(family = "Whitney", face = "italic", size = 12, margin = margin(t = 0.5, unit = "cm"), hjust = 0),
+    panel.background = element_rect(fill = "#f8f9fa", colour = "gray"), 
+    panel.grid = element_blank(),
+    panel.grid.minor.y = element_line(colour = "gray", linetype = 2),
+    panel.grid.major.y = element_line(colour = "gray", linetype = 4),
+    axis.title.y = element_text(family = "Whitney", face = "bold", size = 12, margin = margin(r = 0.5, unit = "cm")),
+    axis.text.x = element_text(family = "Whitney", face = "bold", size = 10, angle = 45, hjust = 1),
+    axis.title.x = element_text(family = "Whitney", face = "bold", size = 12, margin = margin(t = 0.5, unit = "cm")),
+    strip.background = element_rect(fill = "#e9ecef"),
+    strip.text = element_text(family = "Whitney", face= "bold", size = 14),
+    plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+  )
+```

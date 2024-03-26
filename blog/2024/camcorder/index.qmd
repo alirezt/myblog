@@ -1,0 +1,62 @@
+---
+title: "How beautiful graphs emerge from simple ones"
+date: 2024-03-15
+description: "Motion picures showing design process of ggplot graphs"
+image: "img/map2.png"
+twitter-card: 
+  image: "img/map2.png"
+open-graph: 
+  image: "img/map2.png"
+categories: 
+  - r
+  - visualization
+  - ggplot
+  - camcorder
+---
+
+In this post I will show you couple of gif examples of ggplot graph development which recorded by [camcorder package](https://github.com/thebioengineer/camcorder).
+
+As mentioend in their documentation `camcorder` is an R package to track and automatically save graphics generated with `ggplot2` that are created across one or multiple sessions with the eventual goal of creating a GIF showing all the plots saved *sequentially* during the design process.
+
+After installation, the package enables you to: 1. save a ggplot automatically every time you run ggplot() in any format with given specifications 2. generate a GIF that showcases every step of the design process using those image files 3. inspect the ggplot output directly with your specifications in the RStudio IDE-**you’ll get what you see**
+
+I particularly love the third point since it enables you to see the end result instantly instead of saving it with `ggsave`, for instance.
+
+Here are some graphs:
+
+::: {.border .column-page-inset layout="[[30,35,35],[35,30,40],[41,41,18]]" layout-valign="bottom"}
+![](img/map2.png)
+
+![](img/dist3.png)
+
+![](img/dist1.png)
+
+![](img/dist2.png)
+
+![](img/box1.png)
+
+![](img/hist1.png)
+
+![](img/hist2.png)
+
+![](img/map1.png)
+
+![](img/bar1.png)
+:::
+
+And these are some recorded gif examples:
+
+::: {.border .column-page-inset layout="[[40,40],[40,40]]" layout-valign="bottom"}
+![](cam/Income_ggdist_dotplot1.gif)
+
+![](cam/Income_ggdist_dotplot2.gif)
+
+![](cam/Income_ggdist_dotplot3.gif)
+
+![](cam/Nigeria_GWP2021_ncdr_edu_histogram.gif)
+
+:::
+
+
+
+
