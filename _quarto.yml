@@ -1,0 +1,54 @@
+project:
+  type: website
+  output-dir: docs
+  
+  preview: 
+    port: 5555
+    browser: true
+    watch-inputs: true
+    navigate: true
+
+  render:
+    - "*.qmd"
+    - "*.md"
+    - "!etc/"
+
+  resources:
+    - "files/**"
+    - "etc/**"
+
+website:
+  title: "Alireza Taghdisian"
+  navbar:
+    pinned: true
+
+    left:
+      - about.qmd
+      - text: "Blog"
+        file: blog/index.qmd
+    
+    right: 
+      - icon: github
+        href: https://github.com/alirezt
+      - icon: twitter
+        href: https://twitter.com/ATaghdisian
+      - text: "{{< iconify bi linkedin size=1.1em title='LinkedIn' >}}"
+        href: https://www.linkedin.com/in/alireza-taghdisian
+        
+
+format:
+  html:
+    theme: 
+      - html/ath.scss
+    grid: 
+      body-width: 900px
+    toc: false
+    code-link: true
+    anchor-sections: true
+    fig-cap-location: margin
+    reference-location: margin
+    footnotes-hover: true
+    highlight-style: monokai
+
+editor: visual
+
