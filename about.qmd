@@ -1,6 +1,6 @@
 ---
 title: "About"
-image: "files/profile_pics/profile.JPG"
+image: files/profile_pics/profile.JPG
 about: 
   template: solana
   image-width: 12em
